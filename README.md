@@ -86,10 +86,55 @@ Alternative credit score → Unlocks micro-loans → Financial inclusion
 ##  Core Innovations & Features
 
 *  **Agri-Rider & Milk-Run Pooling:** Smart transport aggregation solving last-mile logistics  
-*  **QR-Verified Trust:** Transparent, traceable supply chain
-* ** The AI Scanner sorting 
+*  **QR-Verified Trust:** Transparent, traceable supply chain  
+*  **The AI Scanner sorting**  
 *  **Flash Sales & Group Buying:** Faster movement of perishable goods  
 *  **Instant UPI Payouts (Future):** Direct farmer payments  
+
+---
+
+## 🧠 Tech Stack & System Architecture
+
+<div align="center">
+
+### 🖥️ Frontend UI Layer  
+`React.js` • `Tailwind CSS`  
+➡️ Lightweight, responsive UI for low-bandwidth environments  
+
+⬇️
+
+### 🤖 AI Processing Engine  
+`Computer Vision` • `Custom ML Algorithms`  
+➡️ Real-time grading (Grade B/C)  
+➡️ Removes human bias  
+
+⬇️
+
+### 🗺️ Database, GIS & Cloud  
+`Firebase Auth` • `Firestore` • `Leaflet Maps`  
+➡️ Real-time sync  
+➡️ Smart route optimization (Milk-Run logistics)  
+
+</div>
+
+---
+
+### ⚙️ System Intelligence
+
+- 🧠 AI-based produce classification  
+- 📍 GIS-powered transport pooling  
+- 🔐 QR-based traceability  
+- ⚡ Real-time multi-portal sync  
+
+---
+
+### 🔄 End-to-End Flow
+
+1️⃣ Farmer scans produce → AI grading  
+2️⃣ Produce listed + QR generated  
+3️⃣ Business places order  
+4️⃣ Logistics assigns Milk-Run route  
+5️⃣ Delivery completed → Payment + KhetScore  
 
 ---
 
