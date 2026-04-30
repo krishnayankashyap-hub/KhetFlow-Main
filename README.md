@@ -34,7 +34,7 @@ This superficial rejection fuels a silent, multi-layered catastrophe:
 
 ---
 
-## 🚀 The Solution: KhetFlow's Dual-Engine Rescue coming soon
+## 🚀 The Solution: KhetFlow's Dual-Engine Rescue coming soon tech stack and many more
 
 
 
