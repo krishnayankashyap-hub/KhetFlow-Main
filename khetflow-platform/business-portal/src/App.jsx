@@ -150,7 +150,7 @@ function ThemeProvider({ children }) {
   return (
     <ThemeContext.Provider value={theme}>
       <div style={{ color: theme.colors.text, transition: 'color 0.4s ease' }}>
-        {/* AMBIENT GRADIENTS ADDED BACK HERE */}
+       
         <div className="bg-blob blob-1" />
         <div className="bg-blob blob-2" />
         
@@ -327,7 +327,7 @@ function DeliveryVerificationModal({ order, onClose, onVerify }) {
             const data = JSON.parse(decodedText);
             setScannedData(data);
             scanner.clear();
-            toast.success('✨ QR Code scanned successfully!');
+            toast.success('QR Code scanned successfully!');
           } catch (e) { toast.error('Invalid QR code format!'); }
         }, () => {}
       );
@@ -450,7 +450,7 @@ function CombinedHome() {
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', paddingTop: '3rem' }}>
       <div className="split-layout" style={{ maxWidth: '1100px', width: '100%', padding: '2rem', animation: 'fadeIn 0.6s ease-out' }}>
         
-        {/* LEFT/TOP SIDE: Landing Info */}
+        
         <div className="order-info" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0.5rem' }}>
           <div style={{ background: theme.colors.primary, color: 'white', width: '60px', height: '60px', borderRadius: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.75rem', marginBottom: '1.5rem', boxShadow: `0 8px 16px ${theme.colors.primary}40` }}>🥦</div>
           <h1 style={{ fontSize: '3rem', fontWeight: '800', marginBottom: '1rem', color: theme.colors.text, letterSpacing: '-0.03em', lineHeight: 1.1 }}>
@@ -471,7 +471,7 @@ function CombinedHome() {
           </div>
         </div>
 
-        {/* RIGHT/BOTTOM SIDE: Crisp Auth Card */}
+       
         <div className="order-auth" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="glass-panel" style={{ borderRadius: '1.5rem', padding: '2.5rem', width: '100%', maxWidth: '440px', background: '#ffffff' }}>
             <h2 style={{ fontSize: '1.5rem', fontWeight: '800', textAlign: 'center', color: theme.colors.text, margin: '0 0 0.5rem 0' }}>
@@ -484,12 +484,12 @@ function CombinedHome() {
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {!isLogin && (
                 <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                  <div style={{ flex: '1 1 45%' }}><PremiumInput name="businessName" placeholder="Cafe Name" label="Business Name" icon="🏪" value={form.businessName} onChange={handleChange} error={errors.businessName} /></div>
-                  <div style={{ flex: '1 1 45%' }}><PremiumInput name="ownerName" placeholder="Your Name" label="Owner Name" icon="👤" value={form.ownerName} onChange={handleChange} error={errors.ownerName} /></div>
+                  <div style={{ flex: '1 1 45%' }}><PremiumInput name="businessName" placeholder="Cafe Name" label="Business Name" icon="" value={form.businessName} onChange={handleChange} error={errors.businessName} /></div>
+                  <div style={{ flex: '1 1 45%' }}><PremiumInput name="ownerName" placeholder="Your Name" label="Owner Name" icon="" value={form.ownerName} onChange={handleChange} error={errors.ownerName} /></div>
                 </div>
               )}
               
-              <PremiumInput name="identifier" type="text" placeholder="name@company.com or 10-digit phone" label="Email or Phone Number" icon="✉️" value={form.identifier} onChange={handleChange} error={errors.identifier} />
+              <PremiumInput name="identifier" type="text" placeholder="name@company.com or 10-digit phone" label="Email or Phone Number" icon="" value={form.identifier} onChange={handleChange} error={errors.identifier} />
               <PremiumInput name="password" type="password" placeholder="••••••••" label="Password" icon="🔒" value={form.password} onChange={handleChange} error={errors.password} helperText={!isLogin && "At least 6 characters"} />
               
               {!isLogin && (
