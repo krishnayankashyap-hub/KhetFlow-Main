@@ -6,8 +6,7 @@
 **From Food Waste to Farmer Wealth. From Surplus Stock to Business Profit. Healing the Planet.**
 
 [![Live Demo](https://img.shields.io/badge/Live_Demo-khetflow.com-2ea44f?style=for-the-badge&logo=googlechrome&logoColor=white)](https://khetflow.com)
-[![Track](https://img.shields.io/badge/Track-AI%20%2F%20ML-blue?style=for-the-badge&logo=android&logoColor=white)](#)
-[![Theme](https://img.shields.io/badge/Theme-Social_Impact_%26_Sustainability-ff69b4?style=for-the-badge&logo=target&logoColor=white)](#)
+
 
 <br>
 
