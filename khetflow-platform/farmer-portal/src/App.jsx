@@ -342,7 +342,6 @@ function AnimatedBackground() {
 }
 
 // --- Weather Widget Component ---
-// Note: We use isMobileBox to render the grid box for mobile, and the big dashboard header for desktop.
 function WeatherWidget({ location, isMobileBox }) {
   const [weather, setWeather] = useState({
     temp: 28,
@@ -575,7 +574,7 @@ function QRCodeModal({ listing, onClose }) {
   );
 }
 
-// --- AI Camera Modal Component (AUTO-SCANNER WITH YOUR ORIGINAL MATH) ---
+// --- AI Camera Modal Component ---
 function AICameraModal({ onClose, onAutoLog }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null); 
@@ -689,7 +688,7 @@ function AICameraModal({ onClose, onAutoLog }) {
         let rootPeelRatio = rootAndPeelPixels / validPixels;
         let greenRatio = greeningPixels / validPixels;
 
-        // --- YOUR ORIGINAL PERFECT SHAPE DEFECT LOGIC ---
+       
         let objWidth = Math.max(1, maxX - minX);
         let objHeight = Math.max(1, maxY - minY);
         let aspectRatio = objWidth / objHeight;
@@ -1259,7 +1258,7 @@ function FarmerLanding() {
 }
 
 
-// --- Auth Page (Premium SaaS Layout) ---
+// --- Auth Page  ---
 function AuthPage({ isLogin }) {
   const navigate = useNavigate();
   const { t } = useContext(LanguageContext);
@@ -1327,7 +1326,7 @@ function AuthPage({ isLogin }) {
 
       <div className="w-full max-w-5xl mx-auto flex flex-col lg:flex-row gap-12 lg:gap-20 items-center justify-center relative z-10 py-10">
         
-        {/* LEFT SIDE: Professional SaaS Landing Info */}
+        
         <div className="w-full lg:w-1/2 flex flex-col items-center lg:items-start text-center lg:text-left order-2 lg:order-1 animate-in slide-in-from-bottom-8 duration-500 delay-100">
           <div className="w-12 h-12 md:w-16 md:h-16 mb-4 md:mb-6 bg-emerald-500 rounded-[1rem] md:rounded-[1.25rem] flex items-center justify-center shadow-lg shadow-emerald-500/30">
             <Leaf className="w-6 h-6 md:w-8 md:h-8 text-white" />
@@ -1355,7 +1354,7 @@ function AuthPage({ isLogin }) {
           </div>
         </div>
 
-        {/* RIGHT SIDE: Crisp Auth Card */}
+     
         <div className="w-full max-w-md lg:w-1/2 flex justify-center order-1 lg:order-2">
           <div className="bg-white rounded-[2rem] shadow-[0_20px_40px_-15px_rgba(15,23,42,0.05)] border border-slate-100 p-6 md:p-10 w-full animate-in slide-in-from-bottom-4 duration-500">
             
@@ -1799,7 +1798,7 @@ useEffect(() => {
         status: isFull ? 'full' : 'open'
       });
       
-      
+      // Farmer to Truck's manifest
       await addDoc(collection(db, `transport_pools/${pool.id}/joiners`), {
           riderId: user.uid,
           riderName: farmerData?.farmerName || 'Farmer',
@@ -1891,7 +1890,7 @@ useEffect(() => {
         />
       )}
 
-      {/* --- Top Navigation Bar (Mobile App Style) --- */}
+      
       <div className="sticky top-0 z-40 bg-white/40 backdrop-blur-2xl border-b border-white/60 shadow-[0_4px_30px_rgb(0,0,0,0.03)] print:hidden">
         <MandiTicker />
         <div className="max-w-7xl mx-auto px-2 md:px-6 lg:px-8">
@@ -2014,7 +2013,7 @@ useEffect(() => {
       </div>
 
 <div className="relative z-10 max-w-7xl mx-auto px-2 md:px-6 lg:px-8 py-3 md:py-8">        
-        
+        {/* WeatherWidget only on Desktop here, mobile renders it inside the grid */}
         {view !== 'khetscore' && (
            <div className="hidden md:block">
               <WeatherWidget location={farmerData?.location} isMobileBox={false} />
@@ -2804,7 +2803,7 @@ useEffect(() => {
                         >
                           🗺️ Track Live Map
                         </button>
-                        
+                        {/* ----------------------------------- */}
 
                         {order.status === 'pending' && !order.readyForPickup && (
                           <button
@@ -3083,7 +3082,7 @@ useEffect(() => {
                         }));
                         setShowBatchSummary(false);
                         setScannedItems([]);
-                        setIsAutoFilled(true); 
+                        setIsAutoFilled(true); // Turn lock on
                         setShowAddForm(true); 
                     }}
                     className="w-full bg-emerald-50 text-emerald-600 border border-emerald-200 py-3 rounded-xl font-black text-sm uppercase tracking-wider hover:bg-emerald-100 transition-colors active:scale-95 flex items-center justify-center gap-2"
