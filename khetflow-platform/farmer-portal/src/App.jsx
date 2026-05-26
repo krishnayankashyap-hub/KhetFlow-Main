@@ -574,43 +574,32 @@ function QRCodeModal({ listing, onClose }) {
   );
 }
 
-// --- AI Camera Modal Component ---
-function AICameraModal({ onClose, onAutoLog }) {
+// --- AI BATCH Camera Modal Component (Dots & Selectable Listings) ---
+function AICameraModal({ onClose, onComplete }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null); 
-  const animationRef = useRef(null);
   const [stream, setStream] = useState(null);
-  const [scanResult, setScanResult] = useState(null);
-  const [sessionCount, setSessionCount] = useState(0);
-  const [showSuccessFlash, setShowSuccessFlash] = useState(false);
-
-  const onAutoLogRef = useRef(onAutoLog);
-  const readyToLogRef = useRef(true); 
-
-  useEffect(() => {
-    onAutoLogRef.current = onAutoLog;
-  }, [onAutoLog]);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  
+  const [reviewData, setReviewData] = useState(null);
 
   useEffect(() => {
     startCamera();
-    return () => {
-      stopCamera();
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-    };
+    return () => stopCamera();
   }, []);
 
   const startCamera = async () => {
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' } 
+      });
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
-        videoRef.current.onloadedmetadata = () => {
-          animationRef.current = requestAnimationFrame(processCenterZone);
-        };
       }
     } catch (err) {
       console.error("Error accessing camera:", err);
+      alert("Please allow camera access to use the AI Scanner.");
     }
   };
 
@@ -618,183 +607,251 @@ function AICameraModal({ onClose, onAutoLog }) {
     if (stream) { stream.getTracks().forEach(track => track.stop()); setStream(null); }
   };
 
-  const rgbToHsl = (r, g, b) => {
-      r /= 255; g /= 255; b /= 255;
-      let max = Math.max(r, g, b), min = Math.min(r, g, b);
-      let h, s, l = (max + min) / 2;
-      if (max === min) h = s = 0;
-      else {
-          let d = max - min; s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-          switch (max) {
-              case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-              case g: h = (b - r) / d + 2; break;
-              case b: h = (r - g) / d + 4; break;
-          } h /= 6;
-      } return [h * 360, s * 100, l * 100];
-  };
+  const captureBatchAndAnalyze = async () => {
+    if (!videoRef.current || !canvasRef.current || isAnalyzing) return;
+    
+    setIsAnalyzing(true);
 
-  const processCenterZone = () => {
-    if (!videoRef.current || !canvasRef.current) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
+    
+    const MAX_WIDTH = 1024; 
+    const scale = MAX_WIDTH / video.videoWidth;
+    canvas.width = MAX_WIDTH;
+    canvas.height = video.videoHeight * scale;
+    
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    const base64Image = canvas.toDataURL('image/jpeg', 0.8);
 
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      const zoneRatio = 0.45; 
-      const zSize = Math.floor(Math.min(canvas.width, canvas.height) * zoneRatio); 
-      const startX = (canvas.width - zSize) / 2;
-      const startY = (canvas.height - zSize) / 2;
-      const imageData = ctx.getImageData(startX, startY, zSize, zSize).data;
-
-      let validPixels = 0, onionPixels = 0, potatoPixels = 0;
-      let darkRotPixels = 0, rootAndPeelPixels = 0, greeningPixels = 0;
-      let minX = zSize, maxX = 0, minY = zSize, maxY = 0;
-
-      for (let y = 0; y < zSize; y += 4) {
-          for (let x = 0; x < zSize; x += 4) {
-              let i = (y * zSize + x) * 4;
-              if (i >= imageData.length) continue; 
-              let r = imageData[i], g = imageData[i+1], b = imageData[i+2];
-              const [h, s, l] = rgbToHsl(r, g, b);
-
-              if (l < 12 || l > 90 || (s < 12 && l < 45)) continue; 
-              let isCoreProduce = false;
-
-              if ((h > 250 || h < 20) && s > 12) {
-                  onionPixels++; isCoreProduce = true;
-                  if (s < 35 && l > 40 && l < 80) rootAndPeelPixels++; 
-              } else if ((h >= 20 && h < 65) && s > 15) {
-                  potatoPixels++; isCoreProduce = true;
-                  if (h >= 65 && h < 120 && s > 15 && l < 70) greeningPixels++;
-              }
-              if (l >= 12 && l < 28 && s < 35) { darkRotPixels++; isCoreProduce = true; }
-
-              if (isCoreProduce) {
-                  validPixels++; minX = Math.min(minX, x); maxX = Math.max(maxX, x);
-                  minY = Math.min(minY, y); maxY = Math.max(maxY, y);
-              }
-          }
-      }
-
-      const totalSampledPixels = (zSize * zSize) / 16;
-      if (validPixels > totalSampledPixels * 0.05) { 
-        let detectedCrop = onionPixels > potatoPixels ? "Onion" : "Potato";
-        let finalGrade = "B";
-        
-        let rotRatio = darkRotPixels / validPixels;
-        let rootPeelRatio = rootAndPeelPixels / validPixels;
-        let greenRatio = greeningPixels / validPixels;
-
-       
-        let objWidth = Math.max(1, maxX - minX);
-        let objHeight = Math.max(1, maxY - minY);
-        let aspectRatio = objWidth / objHeight;
-        let isShapeDefect = (aspectRatio > 1.35 || aspectRatio < 0.75);
-
-        if (detectedCrop === "Onion") {
-            if (rotRatio > 0.20 || rootPeelRatio > 0.25 || (isShapeDefect && rootPeelRatio > 0.10)) finalGrade = "C"; 
-        } else {
-            if (rotRatio > 0.20 || greenRatio > 0.25 || (isShapeDefect && rotRatio > 0.10)) finalGrade = "C";
-        }
-
-        let boxLeft = Math.max(0, (minX / zSize) * 100 - 3);
-        let boxTop = Math.max(0, (minY / zSize) * 100 - 3);
-        let boxWidth = Math.min(100 - boxLeft, (objWidth / zSize) * 100 + 6);
-        let boxHeight = Math.min(100 - boxTop, (objHeight / zSize) * 100 + 6);
-
-        setScanResult({
-            name: detectedCrop, grade: finalGrade,
-            confidence: (0.96 + Math.random() * 0.03).toFixed(2),
-            hex: detectedCrop === 'Potato' ? '#2563eb' : '#059669', 
-            box: { left: `${boxLeft}%`, top: `${boxTop}%`, width: `${boxWidth}%`, height: `${boxHeight}%` }
-        });
-
-        // AUTO-LOGGING MAGIC: Triggers once per item!
-        if (readyToLogRef.current) {
-            readyToLogRef.current = false; 
-            setSessionCount(prev => prev + 1);
-            setShowSuccessFlash(true);
-            setTimeout(() => setShowSuccessFlash(false), 500);
-
-            if (onAutoLogRef.current) {
-                onAutoLogRef.current({ name: detectedCrop, grade: finalGrade });
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer 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`, // Replace in prod
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: "meta-llama/llama-4-scout-17b-16e-instruct", 
+          messages: [
+            {
+              role: "user",
+              content: [
+                { 
+                  type: "text", 
+                  text: "You are an agricultural AI batch scanner. Analyze this crate of mixed produce. Return ONLY a valid JSON object with no markdown. 1. Identify all types of produce visible. 2. For each type, estimate the total Grade B and Grade C counts. 3. Map EVERY SINGLE visible item across the image by estimating their X and Y coordinates (as a percentage from 0 to 100, where x:0, y:0 is top-left). CRITICAL INSTRUCTION: You must generate a coordinate entry in the 'items' array for EVERY item you count. If you estimate 40 items total, there MUST be 40 coordinate objects in the 'items' array distributed accurately over the produce. Do not provide a sample; map every item. Use this EXACT format: {\"batches\": [{\"crop_name\": \"Onion\", \"grade_b_count\": 35, \"grade_c_count\": 10}], \"items\": [{\"x\": 45, \"y\": 60, \"grade\": \"C\", \"crop_name\": \"Onion\"}, {\"x\": 20, \"y\": 30, \"grade\": \"B\", \"crop_name\": \"Onion\"}]}" 
+                },
+                { 
+                  type: "image_url", 
+                  image_url: { url: base64Image } 
+                }
+              ]
             }
-        }
+          ],
+          temperature: 0.1,
+          max_tokens: 3000 
+        })
+      });
 
-      } else {
-        setScanResult(null); 
-        readyToLogRef.current = true; 
+      const data = await response.json();
+
+      if (data.error) {
+          throw new Error(data.error.message);
       }
+
+      let rawContent = data.choices[0].message.content;
+      rawContent = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
+      
+      const resultObj = JSON.parse(rawContent);
+
+      const mappedBatches = (resultObj.batches || []).map(b => ({ ...b, isSelected: true }));
+
+      setReviewData({
+          image: base64Image,
+          batches: mappedBatches,
+          items: resultObj.items || []
+      });
+      
+      stopCamera();
+
+    } catch (error) {
+      console.error("Batch Scan Error:", error);
+      alert("Failed to analyze batch. Ensure the image is clear and try again.");
+    } finally {
+      setIsAnalyzing(false);
     }
-    setTimeout(() => { animationRef.current = requestAnimationFrame(processCenterZone); }, 100); 
   };
 
+  const toggleBatchSelection = (index) => {
+      const newBatches = [...reviewData.batches];
+      newBatches[index].isSelected = !newBatches[index].isSelected;
+      setReviewData({...reviewData, batches: newBatches});
+  };
+
+  const handleConfirmAndList = () => {
+      if (!reviewData) return;
+
+      const selectedBatches = reviewData.batches.filter(b => b.isSelected);
+
+      if (selectedBatches.length === 0) {
+          alert("Please select at least one produce batch to list.");
+          return;
+      }
+
+      const finalItemsToLog = [];
+
+      selectedBatches.forEach(batch => {
+          const bCount = parseInt(batch.grade_b_count) || 0;
+          const cCount = parseInt(batch.grade_c_count) || 0;
+          
+          if(bCount > 0) finalItemsToLog.push({ name: batch.crop_name, grade: "B", count: bCount, weight: bCount * 0.15 });
+          if(cCount > 0) finalItemsToLog.push({ name: batch.crop_name, grade: "C", count: cCount, weight: cCount * 0.15 });
+      });
+
+      onComplete(finalItemsToLog);
+  };
+
+  // ==========================================
+  // VIEW 1: AR REVIEW SCREEN
+  // ==========================================
+  if (reviewData) {
+      return (
+          <div className="fixed inset-0 z-[150] bg-slate-900 flex flex-col animate-in fade-in">
+              <div className="p-4 flex justify-between items-center bg-slate-900 text-white shadow-md relative z-10">
+                  <div className="flex items-center gap-2">
+                      <Aperture className="w-5 h-5 text-emerald-400" />
+                      <span className="font-extrabold tracking-wide">AI Batch Audit</span>
+                  </div>
+                  <button onClick={onClose} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors">
+                      <X className="w-5 h-5" />
+                  </button>
+              </div>
+
+              {}
+              <div className="flex-1 relative overflow-hidden bg-black flex items-center justify-center">
+                  <div className="relative w-full max-w-lg">
+                      <img src={reviewData.image} alt="Batch" className="w-full h-auto object-contain" />
+                      
+                      {}
+                      {reviewData.items.map((item, idx) => (
+                          <div 
+                              key={idx}
+                              className={`absolute w-3 h-3 md:w-4 md:h-4 rounded-full border border-white/50 shadow-[0_0_8px_rgba(0,0,0,0.6)] transform -translate-x-1/2 -translate-y-1/2 flex items-center justify-center group cursor-pointer animate-in zoom-in ${item.grade === 'C' ? 'bg-rose-500' : 'bg-emerald-500'}`}
+                              style={{ left: `${item.x}%`, top: `${item.y}%` }}
+                          >
+                              {}
+                              <div className={`absolute -top-6 left-1/2 -translate-x-1/2 text-white text-[9px] md:text-[10px] font-black px-2 py-0.5 rounded shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 ${item.grade === 'C' ? 'bg-rose-600' : 'bg-emerald-600'}`}>
+                                  {item.crop_name} Grade {item.grade}
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+
+              {}
+              <div className="bg-white rounded-t-[2.5rem] p-6 pb-8 shadow-2xl relative z-20 -mt-6 max-h-[55vh] overflow-y-auto">
+                  <h3 className="text-xl font-black text-slate-800 mb-4 border-b border-slate-100 pb-3">Select Produce to List</h3>
+                  
+                  {}
+                  <div className="space-y-3 mb-6">
+                      {reviewData.batches.map((batch, idx) => (
+                          <div 
+                              key={idx} 
+                              onClick={() => toggleBatchSelection(idx)}
+                              className={`flex justify-between items-center p-3 md:p-4 rounded-2xl border cursor-pointer transition-all ${batch.isSelected ? 'bg-emerald-50 border-emerald-200 shadow-sm' : 'bg-slate-50 border-slate-200 opacity-60'}`}
+                          >
+                              <div className="flex items-center gap-3">
+                                  <div className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${batch.isSelected ? 'bg-emerald-500 border-emerald-600 text-white' : 'bg-white border-slate-300'}`}>
+                                      {batch.isSelected && <Check className="w-3.5 h-3.5" />}
+                                  </div>
+                                  <span className="font-extrabold text-slate-700 text-sm md:text-base">{batch.crop_name}</span>
+                              </div>
+                              <div className="flex gap-4">
+                                  <div className="flex items-center gap-1.5">
+                                      <span className={`text-sm font-black ${batch.isSelected ? 'text-emerald-600' : 'text-slate-400'}`}>{batch.grade_b_count}</span>
+                                      <span className="text-[10px] font-bold text-slate-400">Gr B</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 border-l border-slate-200 pl-4">
+                                      <span className={`text-sm font-black ${batch.isSelected ? 'text-rose-500' : 'text-slate-400'}`}>{batch.grade_c_count}</span>
+                                      <span className="text-[10px] font-bold text-slate-400">Gr C</span>
+                                  </div>
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+
+                  {}
+
+                  <div className="flex gap-3">
+                      <button 
+                          onClick={() => { setReviewData(null); startCamera(); }}
+                          className="px-6 py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-2xl transition-colors active:scale-95 text-sm md:text-base"
+                      >
+                          Retake
+                      </button>
+                      <button 
+                          onClick={handleConfirmAndList}
+                          className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl shadow-lg shadow-emerald-200 transition-all active:scale-95 flex items-center justify-center gap-2 text-sm md:text-base"
+                      >
+                          <CheckCircle2 className="w-5 h-5" /> List Selected
+                      </button>
+                  </div>
+              </div>
+          </div>
+      );
+  }
+
+  // ==========================================
+  // VIEW 2: CAMERA CAPTURE SCREEN
+  // ==========================================
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-black/95 backdrop-blur-md animate-in fade-in">
-      {showSuccessFlash && <div className="absolute inset-0 bg-emerald-500/20 z-40 pointer-events-none transition-opacity duration-300" />}
-      
-      <div className="relative w-full h-[70vh] bg-black flex flex-col justify-center items-center overflow-hidden">
+      <div className="relative w-full h-[85vh] bg-black flex flex-col justify-center items-center overflow-hidden">
+        
         <div className="absolute top-0 left-0 right-0 z-30 p-4 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent">
           <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10">
              <Aperture className="w-5 h-5 text-emerald-400" />
-             <span className="text-white font-extrabold tracking-wide text-sm">KhetFlow Auto-Sorter</span>
+             <span className="text-white font-extrabold tracking-wide text-sm">Batch Scanner</span>
           </div>
+          <button onClick={onClose} className="bg-black/40 p-2 rounded-full text-white border border-white/10">
+              <X className="w-5 h-5" />
+          </button>
         </div>
 
         <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover opacity-90" />
         <canvas ref={canvasRef} className="hidden" />
 
-        <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
-           <div className="relative w-[260px] h-[260px]">
-              {!scanResult ? (
-                <>
-                  <div className="absolute top-0 left-0 w-8 h-8 border-t-[3px] border-l-[3px] border-white/40"></div>
-                  <div className="absolute top-0 right-0 w-8 h-8 border-t-[3px] border-r-[3px] border-white/40"></div>
-                  <div className="absolute bottom-0 left-0 w-8 h-8 border-b-[3px] border-l-[3px] border-white/40"></div>
-                  <div className="absolute bottom-0 right-0 w-8 h-8 border-b-[3px] border-r-[3px] border-white/40"></div>
-                  <div className="absolute inset-0 flex items-center justify-center flex-col">
-                      <ScanLine className="w-8 h-8 text-white/50 mb-2 animate-pulse" />
-                      <span className="text-white/80 font-extrabold text-xs uppercase tracking-widest text-center px-4 drop-shadow-md">Swipe Produce Here</span>
+        <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none p-8">
+           <div className="relative w-full max-w-md aspect-[4/3] border-2 border-dashed border-white/40 rounded-2xl flex items-center justify-center bg-white/5">
+              {isAnalyzing ? (
+                  <div className="flex flex-col items-center">
+                      <ScanLine className="w-10 h-10 text-emerald-400 mb-3 animate-pulse" />
+                      <span className="text-emerald-400 font-black text-sm uppercase tracking-widest text-center px-4 drop-shadow-md">Inspecting Quality...</span>
                   </div>
-                </>
               ) : (
-                <div className="absolute transition-all duration-75 border-[3px]" style={{ borderColor: scanResult.hex, left: scanResult.box.left, top: scanResult.box.top, width: scanResult.box.width, height: scanResult.box.height }}>
-                  <div className="absolute -top-[24px] left-[-3px] px-2 py-1 text-[12px] font-black text-white whitespace-nowrap tracking-wider" style={{ backgroundColor: scanResult.hex }}>
-                    {scanResult.name} Gr_{scanResult.grade} {scanResult.confidence}
-                  </div>
-                </div>
+                  <span className="text-white/60 font-black text-sm uppercase tracking-widest text-center px-4 drop-shadow-md">
+                     Align crate inside frame
+                  </span>
               )}
            </div>
         </div>
+
+        {/* Capture Button */}
+        <div className="absolute bottom-8 left-0 right-0 flex justify-center z-40">
+           <button 
+             onClick={captureBatchAndAnalyze}
+             disabled={isAnalyzing}
+             className={`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all ${isAnalyzing ? 'border-slate-500 bg-slate-600/50' : 'border-white bg-white/20 hover:bg-white/40 active:scale-95'}`}
+           >
+              <div className={`w-14 h-14 rounded-full ${isAnalyzing ? 'bg-slate-400' : 'bg-white'}`}></div>
+           </button>
+        </div>
       </div>
 
-      <div className="flex-1 bg-white rounded-t-[2.5rem] p-6 flex flex-col justify-between z-30 -mt-6">
-          <div className="w-full flex items-center justify-between bg-slate-50 border border-slate-100 p-4 rounded-2xl">
-              <div>
-                  <p className="text-[10px] uppercase tracking-widest font-black text-slate-400 mb-1">Session Data</p>
-                  <h3 className="text-slate-800 font-black text-2xl tracking-tight">{sessionCount} <span className="text-slate-400 text-lg">Items Logged</span></h3>
-              </div>
-              {showSuccessFlash ? (
-                  <div className="bg-emerald-100 text-emerald-600 px-3 py-1.5 rounded-full flex items-center gap-1.5 animate-in slide-in-from-right-4">
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span className="text-xs font-bold uppercase tracking-wider">Logged</span>
-                  </div>
-              ) : (
-                  <div className={`px-3 py-1.5 rounded-full ${sessionCount > 0 ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-500'}`}>
-                      <span className="text-xs font-bold uppercase tracking-wider">{sessionCount > 0 ? 'Active' : 'Waiting'}</span>
-                  </div>
-              )}
-          </div>
-
-          <button
-              onClick={onClose}
-              className="w-full mt-4 bg-slate-900 hover:bg-emerald-600 text-white font-black text-sm uppercase tracking-widest py-5 rounded-2xl transition-colors shadow-lg active:scale-95"
-          >
-              Done Scanning
-          </button>
+      <div className="flex-1 bg-white rounded-t-[2.5rem] p-6 flex flex-col justify-center items-center z-30 -mt-6">
+          <h3 className="text-slate-800 font-black text-xl mb-1">AI Mixed Batch Audit</h3>
+          <p className="text-slate-500 font-medium text-sm text-center max-w-sm">Mix crops freely. The AI will audit, count, and assign grades automatically.</p>
       </div>
     </div>
   );
@@ -807,7 +864,6 @@ function LiveTrackingModal({ order, onClose }) {
   const markerRef = useRef(null);
   const [progress, setProgress] = useState(0);
 
-  // Initialize free map dynamically
   useEffect(() => {
     let target = 15; 
     if (order.status === 'picked') target = 65; 
@@ -815,7 +871,6 @@ function LiveTrackingModal({ order, onClose }) {
     setProgress(target);
 
     const initMap = () => {
-      // Prevent double initialization
       if (mapRef.current || !mapContainerRef.current) return;
       
       const map = window.L.map(mapContainerRef.current, {
@@ -826,15 +881,12 @@ function LiveTrackingModal({ order, onClose }) {
         attribution: '© OpenStreetMap contributors'
       }).addTo(map);
 
-      // slightly different origin/dest coordinates based on order ID for variety
       const hash = order.id.charCodeAt(0) || 0;
-      const farmPos = [28.5355 + (hash * 0.001), 77.3910 - (hash * 0.001)]; // Origin (Noida area)
-      const hubPos = [28.7041 - (hash * 0.001), 77.1025 + (hash * 0.001)]; // Dest (Delhi area)
+      const farmPos = [28.5355 + (hash * 0.001), 77.3910 - (hash * 0.001)]; 
+      const hubPos = [28.7041 - (hash * 0.001), 77.1025 + (hash * 0.001)]; 
       
-      // Draw the expected route
       window.L.polyline([farmPos, hubPos], { color: '#10b981', weight: 5, dashArray: '10, 10' }).addTo(map);
 
-      // Add Origin & Dest markers
       const dotIcon = (color) => window.L.divIcon({
         html: `<div style="background: ${color}; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
         className: '', iconSize: [16, 16], iconAnchor: [8, 8]
@@ -842,7 +894,6 @@ function LiveTrackingModal({ order, onClose }) {
       window.L.marker(farmPos, { icon: dotIcon('#10b981') }).addTo(map).bindPopup('Farm Origin');
       window.L.marker(hubPos, { icon: dotIcon('#3b82f6') }).addTo(map).bindPopup('Buyer Destination');
 
-      // Add the moving Truck Icon
       const truckIcon = window.L.divIcon({
         html: `<div style="background: white; border: 3px solid #10b981; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 1000;">🚚</div>`,
         className: '',
@@ -850,23 +901,19 @@ function LiveTrackingModal({ order, onClose }) {
         iconAnchor: [20, 20]
       });
 
-      // Calculate current position based on status target
       const currentLat = farmPos[0] + (hubPos[0] - farmPos[0]) * (target / 100);
       const currentLng = farmPos[1] + (hubPos[1] - farmPos[1]) * (target / 100);
 
       markerRef.current = window.L.marker([currentLat, currentLng], { icon: truckIcon }).addTo(map);
       
-      // Auto-focus map to fit the entire route
       map.fitBounds(window.L.latLngBounds(farmPos, hubPos).pad(0.3));
       mapRef.current = map;
 
-      // gray tile 
       setTimeout(() => {
         map.invalidateSize();
       }, 300);
     };
 
-    // Load Leaflet (Free, no API keys)
     if (!window.L) {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
@@ -896,7 +943,6 @@ function LiveTrackingModal({ order, onClose }) {
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-4 animate-in fade-in duration-300">
       <div className="bg-white/90 backdrop-blur-2xl w-full max-w-4xl rounded-[2.5rem] overflow-hidden shadow-[0_8px_32px_0_rgba(31,38,135,0.15)] flex flex-col border border-white/60">
         
-        {/* Header */}
         <div className="p-5 md:p-6 bg-white/40 border-b border-white/60 flex justify-between items-center shadow-sm relative z-20">
           <div>
             <h2 className="font-extrabold flex items-center gap-2 text-lg md:text-2xl text-slate-800">
@@ -909,17 +955,14 @@ function LiveTrackingModal({ order, onClose }) {
           </button>
         </div>
 
-        {/* Real Leaflet Map Container */}
         <div className="relative h-64 md:h-96 w-full bg-slate-100 z-0 border-y border-slate-200">
            <div ref={mapContainerRef} className="absolute inset-0 w-full h-full z-0"></div>
            
-           {/* Live indicator overlay */}
            <div className="absolute top-4 left-4 z-[400] bg-white/90 backdrop-blur-md text-emerald-600 font-extrabold text-xs px-4 py-2 rounded-full shadow-lg border border-emerald-100 flex items-center gap-2">
              <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping"></span> Live GPS Active
            </div>
         </div>
 
-        {/* Order Details & Timeline Section */}
         <div className="p-6 md:p-8 bg-white/60 backdrop-blur-md relative z-20">
            <div className="flex flex-col md:flex-row gap-6 md:gap-10">
               <div className="flex-1 space-y-4">
@@ -951,7 +994,6 @@ function LiveTrackingModal({ order, onClose }) {
                  </div>
               </div>
 
-              {/* Status Timeline */}
               <div className="flex-1 border-t md:border-t-0 md:border-l border-slate-200/50 pt-6 md:pt-0 md:pl-8">
                  <h3 className="text-xl font-extrabold text-slate-800 border-b border-slate-200/50 pb-3 mb-5">Current Status</h3>
                  <div className="space-y-5 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-1 before:bg-slate-200/50">
@@ -1214,7 +1256,7 @@ function FarmerLanding() {
         </div>
 
         <h1 className="text-4xl md:text-7xl font-extrabold tracking-tight mb-4 md:mb-6 text-slate-800 leading-tight">
-          KhetFlow <span className="text-emerald-500 bg-clip-text">Farmer</span> 👩🏽‍🌾
+          KhetFlow <span className="text-emerald-500 bg-clip-text">Farmer</span> 
         </h1>
 
         <p className="text-lg md:text-2xl text-slate-600 font-bold mb-4">
@@ -1338,7 +1380,7 @@ function AuthPage({ isLogin }) {
             Sell Grade B & C produce that would otherwise go to waste. Zero waste, better income, happy planet.
           </p>
 
-          {/* 3 Square Stats Layout */}
+          {}
           <div className="grid grid-cols-3 gap-3 md:gap-4 w-full max-w-md hidden md:grid">
             {[
               { label: 'BETTER PRICES', value: '+35%', icon: <IndianRupee className="w-5 h-5 md:w-6 md:h-6" />, color: 'text-emerald-600' },
@@ -1354,7 +1396,7 @@ function AuthPage({ isLogin }) {
           </div>
         </div>
 
-     
+      
         <div className="w-full max-w-md lg:w-1/2 flex justify-center order-1 lg:order-2">
           <div className="bg-white rounded-[2rem] shadow-[0_20px_40px_-15px_rgba(15,23,42,0.05)] border border-slate-100 p-6 md:p-10 w-full animate-in slide-in-from-bottom-4 duration-500">
             
@@ -1448,17 +1490,17 @@ function Dashboard() {
   const [isAutoFilled, setIsAutoFilled] = useState(false);
   const [selectedListing, setSelectedListing] = useState(null);
   
-  // NEW AUTO-SCAN STATE:
+
   const [scannedItems, setScannedItems] = useState([]);
   const [showBatchSummary, setShowBatchSummary] = useState(false);
 
-  const handleAutoLog = (itemData) => {
-    setScannedItems(prev => [...prev, itemData]);
-  };
-
-  const handleDoneScanning = () => {
+  
+  const handleCameraComplete = (batchesToList) => {
     setShowCameraModal(false);
-    if (scannedItems.length > 0) setShowBatchSummary(true);
+    if (batchesToList && batchesToList.length > 0) {
+        setScannedItems(batchesToList);
+        setShowBatchSummary(true);
+    }
   };
 
   const [listings, setListings] = useState([]);
@@ -1531,7 +1573,7 @@ useEffect(() => {
     return unsubscribe;
   }, []);
 
-  // REAL-TIME FIREBASE LISTENER FOR TRUCKS
+
   useEffect(() => {
     const q = query(collection(db, 'transport_pools'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -1693,18 +1735,6 @@ useEffect(() => {
     }
   };
 
-  const handleScanComplete = (scanResult) => {
-    setNewListing(prev => ({
-        ...prev,
-        name: scanResult.name,
-        grade: scanResult.grade,
-        quantity: scanResult.quantity,
-        description: scanResult.description,
-        imagePreview: scanResult.imagePreview
-    }));
-    setShowAddForm(true);
-  };
-
   const handleAddListing = async (e) => {
     e.preventDefault();
     setUploading(true);
@@ -1751,8 +1781,15 @@ useEffect(() => {
         flashSaleDiscount: 0, 
         flashSaleEndTime: '' 
       });
+      
       setShowAddForm(false);
       await fetchListings(user.uid);
+
+      // Check if there are more items to list from the batch
+      if (scannedItems.length > 0) {
+          setShowBatchSummary(true);
+      }
+
     } catch (error) {
       alert('Error listing product: ' + error.message);
     } finally {
@@ -1791,14 +1828,14 @@ useEffect(() => {
     try {
       const isFull = (pool.filledCapacity + weight) >= pool.totalCapacity;
       
-      // Update Main Truck Capacity
+      
       await updateDoc(doc(db, 'transport_pools', pool.id), {
         filledCapacity: increment(weight),
         farmerCount: increment(1),
         status: isFull ? 'full' : 'open'
       });
       
-      // Farmer to Truck's manifest
+  
       await addDoc(collection(db, `transport_pools/${pool.id}/joiners`), {
           riderId: user.uid,
           riderName: farmerData?.farmerName || 'Farmer',
@@ -1844,7 +1881,7 @@ useEffect(() => {
     <div className="min-h-screen bg-transparent pb-20 font-sans">
       <AnimatedBackground />
 
-      {/* --- Modals --- */}
+      {}
       {showQRModal && selectedListing && (
         <QRCodeModal
           listing={selectedListing}
@@ -1870,7 +1907,7 @@ useEffect(() => {
         />
       )}
 
-      {/* --- TRACKING SELECTION HUB --- */}
+      {}
       {showTrackingList && (
         <TrackingListModal
           orders={orders}
@@ -1882,7 +1919,7 @@ useEffect(() => {
         />
       )}
 
-      {/* Live Tracking Modal */}
+      {}
       {trackingOrder && (
         <LiveTrackingModal
           order={trackingOrder}
@@ -1896,7 +1933,7 @@ useEffect(() => {
         <div className="max-w-7xl mx-auto px-2 md:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center py-2 md:py-0 md:h-20 gap-2 md:gap-0">
             
-            {/* Header / Logo Row */}
+            {}
             <div className="w-full md:w-auto flex justify-between items-center px-1 md:px-0">
                 <div className="flex items-center gap-1.5 md:gap-4 shrink-0">
                   <div className="w-8 h-8 md:w-12 md:h-12 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl md:rounded-2xl flex items-center justify-center text-emerald-500 shadow-sm">
@@ -1921,7 +1958,7 @@ useEffect(() => {
                 </div>
             </div>
 
-            {/* Navigation Tabs */}
+            {}
             <div className="flex-1 flex justify-center w-full md:mx-4 overflow-hidden">
                 <div className="flex bg-white/40 border border-white/80 p-0.5 md:p-2 rounded-xl md:rounded-3xl w-full md:max-w-max shadow-inner gap-0.5 md:gap-2">
                   <button
@@ -2013,7 +2050,7 @@ useEffect(() => {
       </div>
 
 <div className="relative z-10 max-w-7xl mx-auto px-2 md:px-6 lg:px-8 py-3 md:py-8">        
-        {/* WeatherWidget only on Desktop here, mobile renders it inside the grid */}
+        {}
         {view !== 'khetscore' && (
            <div className="hidden md:block">
               <WeatherWidget location={farmerData?.location} isMobileBox={false} />
@@ -2095,12 +2132,12 @@ useEffect(() => {
             </div>
 
             <div className="bg-white rounded-[1.5rem] md:rounded-[2.5rem] border border-white shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] p-5 md:p-12 relative overflow-hidden print:shadow-none print:border-none print:p-0" id="khetscore-certificate">
-               {/* Watermark */}
+               {}
                <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
                   <Landmark className="w-64 h-64 md:w-96 md:h-96" />
                </div>
 
-               {/* Header */}
+               {}
                <div className="flex justify-between items-start border-b-2 border-slate-800 pb-4 md:pb-6 mb-6 md:mb-8 relative z-10">
                   <div>
                      <h1 className="text-2xl md:text-4xl font-black text-slate-900 tracking-tighter uppercase">KHETFLOW</h1>
@@ -2113,7 +2150,7 @@ useEffect(() => {
                   </div>
                </div>
 
-               {/* Farmer Details & Score Split */}
+               {}
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8 mb-6 md:mb-10 relative z-10">
                   <div className="space-y-4 md:space-y-6">
                      <div>
@@ -2165,7 +2202,7 @@ useEffect(() => {
                   </div>
                </div>
 
-               {/* Credit Factors Grid */}
+               {}
                <div className="mb-6 md:mb-10 relative z-10">
                   <h3 className="text-xs md:text-sm font-extrabold text-slate-800 uppercase tracking-widest border-b-2 border-slate-100 pb-2 md:pb-3 mb-3 md:mb-5">Key Financial Factors</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
@@ -2188,7 +2225,7 @@ useEffect(() => {
                   </div>
                </div>
 
-               {/* Footer / Stamp / Barcode */}
+               {}
                <div className="flex justify-between items-end pt-4 md:pt-8 border-t-2 border-slate-800 relative z-10">
                   <div className="flex flex-col gap-1 md:gap-2">
                      <div className="flex gap-[2px] md:gap-[3px] h-8 md:h-12 items-end opacity-80">
@@ -2208,7 +2245,7 @@ useEffect(() => {
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 print:hidden mt-4 md:mt-8">
-                {/* Unlock Financial Power */}
+                {}
                 <div className="bg-white/40 backdrop-blur-2xl border border-white/60 p-4 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] shadow-[0_8px_32px_0_rgba(31,38,135,0.07)]">
                     <h3 className="text-lg md:text-xl font-extrabold mb-3 md:mb-6 flex items-center gap-2 text-slate-800">
                         <Zap className="w-5 h-5 md:w-6 md:h-6 text-amber-400 drop-shadow-sm" />
@@ -2243,7 +2280,7 @@ useEffect(() => {
                     </div>
                 </div>
 
-                {/* How it is calculated */}
+                {}
                 <div className="bg-white/60 backdrop-blur-2xl p-4 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border border-white/80 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] flex flex-col justify-center">
                     <h3 className="text-lg md:text-xl font-extrabold text-slate-800 mb-4 md:mb-6 flex items-center gap-2">
                         <Info className="w-5 h-5 md:w-6 md:h-6 text-blue-400 drop-shadow-sm" />
@@ -2290,10 +2327,10 @@ useEffect(() => {
         {view === 'listings' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             
-            {/* MOBILE: STAT CARDS */}
+            {}
             <div className="grid grid-cols-3 md:grid-cols-6 gap-2 md:gap-5 mb-4 md:mb-8">
               
-              {/* Weather box on Mobile view */}
+              {}
               <WeatherWidget location={farmerData?.location} isMobileBox={true} />
 
               <div 
@@ -2373,7 +2410,7 @@ useEffect(() => {
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 md:mb-8 bg-white/40 backdrop-blur-md border border-white/60 p-3 md:p-5 rounded-[1.5rem] md:rounded-[2rem] shadow-sm">
                 <h2 className="text-lg md:text-2xl font-extrabold text-slate-800 pl-2">{t('yourHarvest')}</h2>
                 <div className="flex gap-2 md:gap-3 w-full sm:w-auto">
-                    {/* --- TRACK ORDERS HUB BUTTON --- */}
+                    {}
                     <button 
                         onClick={() => setShowTrackingList(true)}
                         className="flex-1 sm:flex-none bg-white/80 backdrop-blur-sm border-2 border-emerald-200 text-emerald-700 px-2 md:px-5 py-2 md:py-3 rounded-xl md:rounded-2xl font-extrabold shadow-sm hover:bg-white hover:border-emerald-300 transition-all flex items-center justify-center gap-1.5 md:gap-2 active:scale-95 text-[10px] md:text-base"
@@ -2382,7 +2419,7 @@ useEffect(() => {
                         <span className="hidden sm:inline">Track Orders</span>
                         <span className="sm:hidden">Track</span>
                     </button>
-                    {/* ---------------------------------- */}
+                    {}
                     <button 
                         onClick={() => { setScannedItems([]); setShowCameraModal(true); }}
                         className="flex-1 sm:flex-none bg-emerald-500 text-white px-2 md:px-5 py-2 md:py-3 rounded-xl md:rounded-2xl font-extrabold shadow-[0_8px_16px_rgba(16,185,129,0.3)] hover:bg-emerald-400 hover:-translate-y-0.5 transition-all flex items-center justify-center gap-1.5 md:gap-2 active:scale-95 text-[10px] md:text-base"
@@ -2410,7 +2447,11 @@ useEffect(() => {
                     <h2 className="text-xl md:text-3xl font-extrabold text-slate-800">{t('addNewListing')}</h2>
                     <p className="text-slate-500 font-bold mt-1 text-xs md:text-base">Details about your imperfect produce</p>
                   </div>
-                  <button onClick={() => setShowAddForm(false)} className="p-2 md:p-3 bg-white border border-slate-200 shadow-sm rounded-full hover:bg-slate-50 text-slate-500 transition-colors">
+                  <button onClick={() => {
+                      setShowAddForm(false);
+                      
+                      if (scannedItems.length > 0) setShowBatchSummary(true);
+                  }} className="p-2 md:p-3 bg-white border border-slate-200 shadow-sm rounded-full hover:bg-slate-50 text-slate-500 transition-colors">
                     <X className="w-5 h-5 md:w-6 md:h-6" />
                   </button>
                 </div>
@@ -2796,14 +2837,14 @@ useEffect(() => {
                           <span className="text-xl md:text-2xl font-black text-emerald-600">₹{farmerEarning}</span>
                         </div>
 
-                        {/* --- TRACK LIVE BUTTON --- */}
+                        {}
                         <button
                           onClick={() => setTrackingOrder(order)}
                           className="w-full mb-1 md:mb-2 bg-white border-2 border-slate-200 text-slate-700 font-extrabold py-2 md:py-3.5 rounded-xl md:rounded-2xl shadow-sm hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-95 text-xs md:text-base flex items-center justify-center gap-1.5 md:gap-2"
                         >
                           🗺️ Track Live Map
                         </button>
-                        {/* ----------------------------------- */}
+                        {}
 
                         {order.status === 'pending' && !order.readyForPickup && (
                           <button
@@ -2978,7 +3019,7 @@ useEffect(() => {
                             </div>
                         </div>
 
-                        {/* Join Pool Logic for Farmers */}
+                        {}
                         {!isFull && farmerData?.hasTransport && (
                           joinId === truck.id ? (
                             <div className="flex flex-col gap-2 md:gap-3 bg-orange-50/50 p-2.5 md:p-4 rounded-xl md:rounded-2xl border border-orange-100 animate-in slide-in-from-bottom-2">
@@ -3030,33 +3071,28 @@ useEffect(() => {
 
       </div>
 
-      {/* --- AI AUTO-SCANNER SYSTEM --- */}
+      {}
       {showCameraModal && (
         <AICameraModal 
-            onClose={handleDoneScanning} 
-            onAutoLog={handleAutoLog}
+            onClose={() => setShowCameraModal(false)} 
+            onComplete={handleCameraComplete}
         />
       )}
 
-      {/* --- BATCH SUMMARY POPUP --- */}
+      {}
       {showBatchSummary && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-md rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="p-8 pb-4 text-center border-b border-slate-100">
+          <div className="bg-white w-full max-w-md rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            <div className="p-8 pb-4 text-center border-b border-slate-100 shrink-0">
               <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <PackageCheck className="w-8 h-8 text-emerald-600" />
               </div>
-              <h2 className="text-2xl font-black text-slate-900">Segregation Complete</h2>
-              <p className="text-slate-500 font-medium mt-1">Select a batch to list on KhetFlow</p>
+              <h2 className="text-xl font-black text-slate-900">Segregation Complete</h2>
+              <p className="text-slate-500 font-medium text-xs mt-1">Pending items: {scannedItems.length}</p>
             </div>
 
-            <div className="p-6 bg-slate-50 space-y-3 max-h-[50vh] overflow-y-auto">
-              {Object.values(scannedItems.reduce((acc, item) => {
-                  const key = `${item.name}-${item.grade}`;
-                  if (!acc[key]) acc[key] = { name: item.name, grade: item.grade, count: 0, weight: 0 };
-                  acc[key].count += 1; acc[key].weight += 0.15; // 0.15kg per item
-                  return acc;
-              }, {})).map((batch, index) => (
+            <div className="p-6 bg-slate-50 space-y-3 overflow-y-auto flex-1">
+              {scannedItems.map((batch, index) => (
                 <div key={index} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-4">
                   <div className="flex justify-between items-center">
                     <div>
@@ -3070,7 +3106,6 @@ useEffect(() => {
                     </div>
                   </div>
                   
-                  {/* NEW INDIVIDUAL LISTING BUTTON */}
                   <button 
                     onClick={() => {
                         setNewListing(prev => ({
@@ -3080,9 +3115,13 @@ useEffect(() => {
                             quantity: batch.weight.toFixed(2),
                             description: `AI Verified Harvest Batch - Grade ${batch.grade} Quality.`
                         }));
+                        
+                        
+                        const remainingItems = scannedItems.filter((_, i) => i !== index);
+                        setScannedItems(remainingItems);
+                        
                         setShowBatchSummary(false);
-                        setScannedItems([]);
-                        setIsAutoFilled(true); // Turn lock on
+                        setIsAutoFilled(true);
                         setShowAddForm(true); 
                     }}
                     className="w-full bg-emerald-50 text-emerald-600 border border-emerald-200 py-3 rounded-xl font-black text-sm uppercase tracking-wider hover:bg-emerald-100 transition-colors active:scale-95 flex items-center justify-center gap-2"
@@ -3093,12 +3132,12 @@ useEffect(() => {
               ))}
             </div>
 
-            <div className="p-6 pt-2">
+            <div className="p-6 pt-2 shrink-0">
               <button 
                 onClick={() => { setShowBatchSummary(false); setScannedItems([]); }} 
                 className="w-full text-slate-400 font-bold text-sm uppercase tracking-widest py-3 hover:text-slate-600 transition-colors"
               >
-                Close & Discard
+                Close & Discard Remaining
               </button>
             </div>
           </div>
@@ -3117,9 +3156,9 @@ export default function App() {
     <LanguageProvider>
       <BrowserRouter>
         <Routes>
-          {/* Bypassed*/}
+          {}
           <Route path="/" element={<Navigate to="/login" replace />} />
-          {/* component alive */}
+          {}
           <Route path="/welcome" element={<FarmerLanding />} />
           <Route path="/login" element={<AuthPage isLogin={true} />} />
           <Route path="/register" element={<AuthPage isLogin={false} />} />
