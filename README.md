@@ -242,8 +242,6 @@ We believe:
 ### Krishnayan Kashyap Pathak
 **Founder • Lead Developer • AI Strategy • Product Vision**
 
-### Mazharul Islam
-**Co-Founder • AI Strategist • Partnerships**
 
 ---
 
